@@ -17,6 +17,14 @@ impl Index {
         index
     }
 
+    pub async fn status(&mut self) -> String {
+        let msg = RequestMessage::Status;
+        let json = serde_json::to_string(&msg).unwrap();
+        let _ = self.ws_stream.send(Message::Text(json)).await;
+        let msg = self.ws_stream.next().await.unwrap().unwrap();
+        msg.to_text().unwrap().to_owned()
+    }
+
     pub async fn size_on_disk(&mut self) -> u64 {
         let msg = RequestMessage::SizeOnDisk;
         let json = serde_json::to_string(&msg).unwrap();
@@ -31,24 +39,110 @@ impl Index {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
+pub struct Bytes32(pub [u8; 32]);
+
+impl AsRef<[u8]> for Bytes32 {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
+impl Serialize for Bytes32 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut hex_string = "0x".to_owned();
+        hex_string.push_str(&hex::encode(self.0));
+        serializer.serialize_str(&hex_string)
+    }
+}
+
+impl<'de> Deserialize<'de> for Bytes32 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        match String::deserialize(deserializer)?.get(2..66) {
+            Some(message_id) => match hex::decode(message_id) {
+                Ok(message_id) => Ok(Bytes32(message_id.try_into().unwrap())),
+                Err(_error) => Err(serde::de::Error::custom("error")),
+            },
+            None => Err(serde::de::Error::custom("error")),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
+#[serde(tag = "type", content = "value")]
+pub enum SubstrateKey {
+    AccountId(Bytes32),
+    AccountIndex(u32),
+    BountyIndex(u32),
+    EraIndex(u32),
+    MessageId(Bytes32),
+    PoolId(u32),
+    PreimageHash(Bytes32),
+    ProposalHash(Bytes32),
+    ProposalIndex(u32),
+    RefIndex(u32),
+    RegistrarIndex(u32),
+    SessionIndex(u32),
+    TipHash(Bytes32),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
+#[serde(tag = "type", content = "value")]
+pub enum Key {
+    Variant(u8, u8),
+    Substrate(SubstrateKey),
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum RequestMessage {
     Status,
     Variants,
+    GetEvents { key: Key },
+    SubscribeEvents { key: Key },
+    UnsubscribeEvents { key: Key },
     SizeOnDisk,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EventMeta {
+    pub index: u8,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PalletMeta {
+    pub index: u8,
+    pub name: String,
+    pub events: Vec<EventMeta>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub block_number: u32,
+    pub event_index: u16,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub struct Span {
+    pub start: u32,
+    pub end: u32,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "camelCase")]
 pub enum ResponseMessage {
-    #[serde(rename_all = "camelCase")]
-    Status {
-        last_head_block: u32,
-        last_batch_block: u32,
-        batch_indexing_complete: bool,
-    },
+    Status(Vec<Span>),
+    Variants(Vec<PalletMeta>),
+    Events { key: Key, events: Vec<Event> },
     Subscribed,
     Unsubscribed,
     SizeOnDisk(u64),
