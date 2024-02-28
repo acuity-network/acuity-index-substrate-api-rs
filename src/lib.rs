@@ -38,12 +38,26 @@ impl Index {
         }
     }
 
+    pub async fn get_variants(&mut self) -> Vec<PalletMeta> {
+        let msg = RequestMessage::Variants;
+        let json = serde_json::to_string(&msg).unwrap();
+        let _ = self.ws_stream.send(Message::Text(json)).await;
+        let msg = self.ws_stream.next().await.unwrap().unwrap();
+        let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+        match response {
+            ResponseMessage::Variants(pallet_meta) => pallet_meta,
+            _ => Vec::new(),
+        }
+    }
+
     pub async fn get_events(&mut self, key: Key) -> Vec<Event> {
         let msg = RequestMessage::GetEvents { key };
         let json = serde_json::to_string(&msg).unwrap();
         let _ = self.ws_stream.send(Message::Text(json)).await;
         let msg = self.ws_stream.next().await.unwrap().unwrap();
         let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
         match response {
             ResponseMessage::Events { events, .. } => events,
             _ => Vec::new(),
