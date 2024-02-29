@@ -63,6 +63,33 @@ impl Index {
             _ => Vec::new(),
         }
     }
+
+    pub async fn subscribe_events(
+        &mut self,
+        key: Key,
+    ) -> impl futures_util::Stream<Item = Vec<Event>> + '_ {
+        let msg = RequestMessage::SubscribeEvents { key };
+        let json = serde_json::to_string(&msg).unwrap();
+        let _ = self.ws_stream.send(Message::Text(json)).await;
+
+        let msg = self.ws_stream.next().await.unwrap().unwrap();
+        let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+        match response {
+            ResponseMessage::Subscribed => {}
+            _ => {}
+        };
+
+        self.ws_stream.by_ref().map(|msg| {
+            let msg = msg.unwrap();
+            let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+            match response {
+                ResponseMessage::Events { key, events } => events,
+                _ => Vec::new(),
+            }
+        })
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
