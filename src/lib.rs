@@ -1,5 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
@@ -181,6 +182,16 @@ pub struct PalletMeta {
 pub struct Event {
     pub block_number: u32,
     pub event_index: u16,
+}
+
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "block number: {}, event index: {}",
+            self.block_number, self.event_index
+        )
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
