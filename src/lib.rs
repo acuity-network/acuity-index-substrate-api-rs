@@ -18,12 +18,17 @@ impl Index {
         index
     }
 
-    pub async fn status(&mut self) -> String {
+    pub async fn status(&mut self) -> Vec<Span> {
         let msg = RequestMessage::Status;
         let json = serde_json::to_string(&msg).unwrap();
         let _ = self.ws_stream.send(Message::Text(json)).await;
         let msg = self.ws_stream.next().await.unwrap().unwrap();
-        msg.to_text().unwrap().to_owned()
+        let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+        match response {
+            ResponseMessage::Status(spans) => spans,
+            _ => Vec::new(),
+        }
     }
 
     pub async fn size_on_disk(&mut self) -> u64 {
@@ -198,6 +203,12 @@ impl fmt::Display for Event {
 pub struct Span {
     pub start: u32,
     pub end: u32,
+}
+
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "start: {}, end: {}", self.start, self.end)
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
