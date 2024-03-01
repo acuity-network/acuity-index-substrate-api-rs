@@ -31,6 +31,30 @@ impl Index {
         }
     }
 
+    pub async fn subscribe_status(&mut self) -> impl futures_util::Stream<Item = Vec<Span>> + '_ {
+        let msg = RequestMessage::SubscribeStatus;
+        let json = serde_json::to_string(&msg).unwrap();
+        let _ = self.ws_stream.send(Message::Text(json)).await;
+
+        let msg = self.ws_stream.next().await.unwrap().unwrap();
+        let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+        match response {
+            ResponseMessage::Subscribed => {}
+            _ => {}
+        };
+
+        self.ws_stream.by_ref().map(|msg| {
+            let msg = msg.unwrap();
+            let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+            match response {
+                ResponseMessage::Status(spans) => spans,
+                _ => Vec::new(),
+            }
+        })
+    }
+
     pub async fn size_on_disk(&mut self) -> u64 {
         let msg = RequestMessage::SizeOnDisk;
         let json = serde_json::to_string(&msg).unwrap();
@@ -162,6 +186,7 @@ pub enum Key {
 #[serde(tag = "type")]
 pub enum RequestMessage {
     Status,
+    SubscribeStatus,
     Variants,
     GetEvents { key: Key },
     SubscribeEvents { key: Key },
