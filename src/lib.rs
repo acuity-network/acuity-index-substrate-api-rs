@@ -120,6 +120,20 @@ impl Index {
             }
         })
     }
+
+    pub async fn unsubscribe_events(&mut self, key: Key) {
+        let msg = RequestMessage::UnsubscribeEvents { key };
+        let json = serde_json::to_string(&msg).unwrap();
+        let _ = self.ws_stream.send(Message::Text(json)).await;
+
+        let msg = self.ws_stream.next().await.unwrap().unwrap();
+        let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+        match response {
+            ResponseMessage::Unsubscribed => {}
+            _ => {}
+        };
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
