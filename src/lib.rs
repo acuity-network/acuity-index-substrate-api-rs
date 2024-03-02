@@ -55,6 +55,20 @@ impl Index {
         })
     }
 
+    pub async fn unsubscribe_status(&mut self) {
+        let msg = RequestMessage::UnsubscribeStatus;
+        let json = serde_json::to_string(&msg).unwrap();
+        let _ = self.ws_stream.send(Message::Text(json)).await;
+
+        let msg = self.ws_stream.next().await.unwrap().unwrap();
+        let response: ResponseMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+        match response {
+            ResponseMessage::Unsubscribed => {}
+            _ => {}
+        };
+    }
+
     pub async fn size_on_disk(&mut self) -> u64 {
         let msg = RequestMessage::SizeOnDisk;
         let json = serde_json::to_string(&msg).unwrap();
@@ -201,6 +215,7 @@ pub enum Key {
 pub enum RequestMessage {
     Status,
     SubscribeStatus,
+    UnsubscribeStatus,
     Variants,
     GetEvents { key: Key },
     SubscribeEvents { key: Key },
