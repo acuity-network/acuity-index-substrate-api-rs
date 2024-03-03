@@ -1,4 +1,6 @@
+#![feature(let_chains)]
 use futures_util::{SinkExt, StreamExt};
+use hybrid_indexer::shared::{Bytes32, Event, EventMeta, PalletMeta, Span, SubstrateKey};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
@@ -160,59 +162,6 @@ impl Index {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
-pub struct Bytes32(pub [u8; 32]);
-
-impl AsRef<[u8]> for Bytes32 {
-    fn as_ref(&self) -> &[u8] {
-        &self.0[..]
-    }
-}
-
-impl Serialize for Bytes32 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut hex_string = "0x".to_owned();
-        hex_string.push_str(&hex::encode(self.0));
-        serializer.serialize_str(&hex_string)
-    }
-}
-
-impl<'de> Deserialize<'de> for Bytes32 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        match String::deserialize(deserializer)?.get(2..66) {
-            Some(message_id) => match hex::decode(message_id) {
-                Ok(message_id) => Ok(Bytes32(message_id.try_into().unwrap())),
-                Err(_error) => Err(serde::de::Error::custom("error")),
-            },
-            None => Err(serde::de::Error::custom("error")),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
-#[serde(tag = "type", content = "value")]
-pub enum SubstrateKey {
-    AccountId(Bytes32),
-    AccountIndex(u32),
-    BountyIndex(u32),
-    EraIndex(u32),
-    MessageId(Bytes32),
-    PoolId(u32),
-    PreimageHash(Bytes32),
-    ProposalHash(Bytes32),
-    ProposalIndex(u32),
-    RefIndex(u32),
-    RegistrarIndex(u32),
-    SessionIndex(u32),
-    TipHash(Bytes32),
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
 #[serde(tag = "type", content = "value")]
 pub enum Key {
@@ -233,48 +182,6 @@ pub enum RequestMessage {
     SizeOnDisk,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct EventMeta {
-    pub index: u8,
-    pub name: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct PalletMeta {
-    pub index: u8,
-    pub name: String,
-    pub events: Vec<EventMeta>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Event {
-    pub block_number: u32,
-    pub event_index: u16,
-}
-
-impl fmt::Display for Event {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "block number: {}, event index: {}",
-            self.block_number, self.event_index
-        )
-    }
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct Span {
-    pub start: u32,
-    pub end: u32,
-}
-
-impl fmt::Display for Span {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "start: {}, end: {}", self.start, self.end)
-    }
-}
-
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "camelCase")]
@@ -285,5 +192,4 @@ pub enum ResponseMessage {
     Subscribed,
     Unsubscribed,
     SizeOnDisk(u64),
-    //    Error,
 }
