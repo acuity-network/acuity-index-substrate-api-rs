@@ -1,6 +1,6 @@
 #![feature(let_chains)]
 use futures_util::{SinkExt, StreamExt};
-use hybrid_indexer::shared::{Bytes32, Event, EventMeta, PalletMeta, Span, SubstrateKey};
+pub use hybrid_indexer::shared::{Bytes32, Event, EventMeta, PalletMeta, Span, SubstrateKey};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
