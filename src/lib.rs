@@ -2,12 +2,16 @@
 use futures_util::{SinkExt, StreamExt};
 pub use hybrid_indexer::shared::{Bytes32, Event, EventMeta, PalletMeta, Span, SubstrateKey};
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use thiserror::Error;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async, tungstenite, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
 };
+
+#[cfg(test)]
+use std::net::SocketAddr;
+#[cfg(test)]
+use tokio::net::TcpListener;
 
 #[derive(Error, Debug)]
 pub enum IndexError {
@@ -192,4 +196,356 @@ pub enum ResponseMessage {
     Subscribed,
     Unsubscribed,
     SizeOnDisk(u64),
+    Error,
+}
+
+#[cfg(test)]
+impl Index {
+    pub async fn test_connect() -> Result<Self, IndexError> {
+        let try_socket = TcpListener::bind("127.0.0.1:0").await;
+        let listener = try_socket.expect("Failed to bind");
+
+        let addr = listener.local_addr().unwrap().to_string();
+        let mut url = "ws://".to_string();
+        url.push_str(&addr);
+
+        tokio::spawn(handle_connection(listener));
+
+        let (ws_stream, _) = connect_async(url).await?;
+        let index = Index { ws_stream };
+        Ok(index)
+    }
+}
+
+#[cfg(test)]
+async fn handle_connection(listener: TcpListener) {
+    let (raw_stream, addr) = listener.accept().await.unwrap();
+    println!("Incoming TCP connection from: {}", addr);
+
+    let ws_stream = tokio_tungstenite::accept_async(raw_stream)
+        .await
+        .expect("Error during the websocket handshake occurred");
+    println!("WebSocket connection established: {}", addr);
+
+    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+    let msg = ws_receiver.next().await.unwrap().unwrap();
+    let request_msg: RequestMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+
+    let response_msg = match request_msg {
+        RequestMessage::Status => ResponseMessage::Status(vec![
+            Span { start: 2, end: 4 },
+            Span { start: 9, end: 23 },
+            Span {
+                start: 20002,
+                end: 400000,
+            },
+        ]),
+        RequestMessage::SubscribeStatus => {
+            let response_msg = ResponseMessage::Subscribed;
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+
+            let response_msg = ResponseMessage::Status(vec![
+                Span { start: 2, end: 4 },
+                Span { start: 9, end: 23 },
+                Span {
+                    start: 20002,
+                    end: 400000,
+                },
+            ]);
+
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+
+            let response_msg = ResponseMessage::Status(vec![
+                Span { start: 2, end: 4 },
+                Span { start: 9, end: 23 },
+                Span {
+                    start: 20002,
+                    end: 400008,
+                },
+            ]);
+
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+
+            let response_msg = ResponseMessage::Status(vec![
+                Span { start: 2, end: 4 },
+                Span { start: 9, end: 23 },
+                Span {
+                    start: 20002,
+                    end: 400028,
+                },
+            ]);
+
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+            let msg = ws_receiver.next().await.unwrap().unwrap();
+            let request_msg: RequestMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+            match request_msg {
+                RequestMessage::UnsubscribeStatus => ResponseMessage::Unsubscribed,
+                _ => ResponseMessage::Error,
+            }
+        }
+        RequestMessage::Variants => ResponseMessage::Variants(vec![PalletMeta {
+            index: 0,
+            name: "test1".to_string(),
+            events: vec![EventMeta {
+                index: 0,
+                name: "event1".to_string(),
+            }],
+        }]),
+        RequestMessage::GetEvents { key } => ResponseMessage::Events {
+            key: Key::Variant(0, 0),
+            events: vec![
+                Event {
+                    block_number: 82,
+                    event_index: 16,
+                },
+                Event {
+                    block_number: 86,
+                    event_index: 17,
+                },
+            ],
+        },
+        RequestMessage::SubscribeEvents { key } => {
+            let response_msg = ResponseMessage::Subscribed;
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+
+            let response_msg = ResponseMessage::Events {
+                key: Key::Variant(0, 0),
+                events: vec![
+                    Event {
+                        block_number: 82,
+                        event_index: 16,
+                    },
+                    Event {
+                        block_number: 86,
+                        event_index: 17,
+                    },
+                ],
+            };
+
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+            let response_msg = ResponseMessage::Events {
+                key: Key::Variant(0, 0),
+                events: vec![Event {
+                    block_number: 102,
+                    event_index: 12,
+                }],
+            };
+
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+
+            let response_msg = ResponseMessage::Events {
+                key: Key::Variant(0, 0),
+                events: vec![Event {
+                    block_number: 108,
+                    event_index: 0,
+                }],
+            };
+
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+            let msg = ws_receiver.next().await.unwrap().unwrap();
+            let request_msg: RequestMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+            match request_msg {
+                RequestMessage::UnsubscribeEvents { key } => ResponseMessage::Unsubscribed,
+                _ => ResponseMessage::Error,
+            }
+        }
+        RequestMessage::SizeOnDisk => ResponseMessage::SizeOnDisk(640),
+        _ => ResponseMessage::Error,
+    };
+    let response_json = serde_json::to_string(&response_msg).unwrap();
+    ws_sender
+        .send(tungstenite::Message::Text(response_json))
+        .await
+        .unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_status() {
+        let mut index = Index::test_connect().await.unwrap();
+        let status = index.status().await.unwrap();
+
+        assert_eq!(
+            status,
+            vec![
+                Span { start: 2, end: 4 },
+                Span { start: 9, end: 23 },
+                Span {
+                    start: 20002,
+                    end: 400000,
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_status() {
+        let mut index = Index::test_connect().await.unwrap();
+        let mut stream = index.subscribe_status().await.unwrap();
+        let status = stream.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            status,
+            vec![
+                Span { start: 2, end: 4 },
+                Span { start: 9, end: 23 },
+                Span {
+                    start: 20002,
+                    end: 400000,
+                },
+            ]
+        );
+
+        let status = stream.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            status,
+            vec![
+                Span { start: 2, end: 4 },
+                Span { start: 9, end: 23 },
+                Span {
+                    start: 20002,
+                    end: 400008,
+                },
+            ]
+        );
+        let status = stream.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            status,
+            vec![
+                Span { start: 2, end: 4 },
+                Span { start: 9, end: 23 },
+                Span {
+                    start: 20002,
+                    end: 400028,
+                },
+            ]
+        );
+        drop(stream);
+        index.unsubscribe_status().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_variants() {
+        let mut index = Index::test_connect().await.unwrap();
+        let variants = index.get_variants().await.unwrap();
+
+        assert_eq!(
+            variants,
+            vec![PalletMeta {
+                index: 0,
+                name: "test1".to_string(),
+                events: vec![EventMeta {
+                    index: 0,
+                    name: "event1".to_string()
+                }]
+            },]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_events() {
+        let mut index = Index::test_connect().await.unwrap();
+        let events = index.get_events(Key::Variant(0, 0)).await.unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event {
+                    block_number: 82,
+                    event_index: 16,
+                },
+                Event {
+                    block_number: 86,
+                    event_index: 17,
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_events() {
+        let mut index = Index::test_connect().await.unwrap();
+        let mut stream = index.subscribe_events(Key::Variant(0, 0)).await.unwrap();
+        let events = stream.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event {
+                    block_number: 82,
+                    event_index: 16,
+                },
+                Event {
+                    block_number: 86,
+                    event_index: 17,
+                },
+            ]
+        );
+
+        let events = stream.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            events,
+            vec![Event {
+                block_number: 102,
+                event_index: 12,
+            }]
+        );
+        let events = stream.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            events,
+            vec![Event {
+                block_number: 108,
+                event_index: 0,
+            }]
+        );
+        drop(stream);
+        index.unsubscribe_events(Key::Variant(0, 0)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_size_on_disk() {
+        let mut index = Index::test_connect().await.unwrap();
+        let size = index.size_on_disk().await.unwrap();
+
+        assert_eq!(size, 640);
+    }
 }
