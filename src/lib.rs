@@ -9,8 +9,6 @@ use tokio_tungstenite::{
 };
 
 #[cfg(test)]
-use std::net::SocketAddr;
-#[cfg(test)]
 use tokio::net::TcpListener;
 
 #[derive(Error, Debug)]
@@ -130,7 +128,7 @@ impl Index {
         key: Key,
     ) -> Result<impl futures_util::Stream<Item = Result<Vec<Event>, IndexError>> + '_, IndexError>
     {
-        let msg = RequestMessage::SubscribeEvents { key };
+        let msg = RequestMessage::SubscribeEvents { key: key.clone() };
         let json = serde_json::to_string(&msg)?;
         self.ws_stream.send(Message::Text(json)).await?;
 
@@ -141,11 +139,20 @@ impl Index {
             return Err(IndexError::NoMessage);
         };
 
-        Ok(self.ws_stream.by_ref().map(|msg| {
+        Ok(self.ws_stream.by_ref().map(move |msg| {
             let response: ResponseMessage = serde_json::from_str(msg?.to_text()?)?;
 
             match response {
-                ResponseMessage::Events { key, events } => Ok(events),
+                ResponseMessage::Events {
+                    key: response_key,
+                    events,
+                } => {
+                    if response_key != key {
+                        Ok(vec![])
+                    } else {
+                        Ok(events)
+                    }
+                }
                 _ => Err(IndexError::NoMessage),
             }
         }))
@@ -305,7 +312,7 @@ async fn handle_connection(listener: TcpListener) {
                 name: "event1".to_string(),
             }],
         }]),
-        RequestMessage::GetEvents { key } => ResponseMessage::Events {
+        RequestMessage::GetEvents { .. } => ResponseMessage::Events {
             key: Key::Variant(0, 0),
             events: vec![
                 Event {
@@ -318,7 +325,7 @@ async fn handle_connection(listener: TcpListener) {
                 },
             ],
         },
-        RequestMessage::SubscribeEvents { key } => {
+        RequestMessage::SubscribeEvents { .. } => {
             let response_msg = ResponseMessage::Subscribed;
             let response_json = serde_json::to_string(&response_msg).unwrap();
             ws_sender
@@ -345,6 +352,20 @@ async fn handle_connection(listener: TcpListener) {
                 .send(tungstenite::Message::Text(response_json))
                 .await
                 .unwrap();
+            let response_msg = ResponseMessage::Events {
+                key: Key::Variant(0, 1),
+                events: vec![Event {
+                    block_number: 102,
+                    event_index: 12,
+                }],
+            };
+
+            let response_json = serde_json::to_string(&response_msg).unwrap();
+            ws_sender
+                .send(tungstenite::Message::Text(response_json))
+                .await
+                .unwrap();
+
             let response_msg = ResponseMessage::Events {
                 key: Key::Variant(0, 0),
                 events: vec![Event {
@@ -375,7 +396,7 @@ async fn handle_connection(listener: TcpListener) {
             let msg = ws_receiver.next().await.unwrap().unwrap();
             let request_msg: RequestMessage = serde_json::from_str(msg.to_text().unwrap()).unwrap();
             match request_msg {
-                RequestMessage::UnsubscribeEvents { key } => ResponseMessage::Unsubscribed,
+                RequestMessage::UnsubscribeEvents { .. } => ResponseMessage::Unsubscribed,
                 _ => ResponseMessage::Error,
             }
         }
@@ -517,6 +538,9 @@ mod tests {
             ]
         );
 
+        let events = stream.next().await.unwrap().unwrap();
+
+        assert_eq!(events, vec![]);
         let events = stream.next().await.unwrap().unwrap();
 
         assert_eq!(
