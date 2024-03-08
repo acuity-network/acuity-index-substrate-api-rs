@@ -211,9 +211,7 @@ impl Index {
 
         tokio::spawn(handle_connection(listener));
 
-        let (ws_stream, _) = connect_async(url).await?;
-        let index = Index { ws_stream };
-        Ok(index)
+        Index::connect(url).await
     }
 }
 
