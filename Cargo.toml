@@ -1,6 +1,6 @@
 [package]
 name = "hybrid-api"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Jonathan Brown"]
 description = "A library for querying Hybrid indexes."
@@ -15,5 +15,5 @@ serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 thiserror = "1.0.57"
 tokio = { version = "1", features = ["full"] }
-hybrid-indexer = "0.5.2"
+hybrid-indexer = "0.5.3"
 tokio-tungstenite = "0.21.0"

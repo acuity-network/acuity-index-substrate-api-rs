@@ -1178,7 +1178,7 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hybrid-api"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "futures-util",
  "hex",
@@ -1192,9 +1192,9 @@ dependencies = [
 
 [[package]]
 name = "hybrid-indexer"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7340e4fbe7087d9700bf8aa208a18f33820edcf4d79da84a66da3701f547b726"
+checksum = "aac047bfa98aaed063e060f42eb9f025f97ec205cebd386e3738d80710c2e010"
 dependencies = [
  "ahash",
  "base58",
