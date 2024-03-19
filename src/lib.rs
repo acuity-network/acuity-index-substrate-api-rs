@@ -1,3 +1,9 @@
+//! A library for querying Hybrid indexes.
+//!
+//! The [Hybrid Indexer](https://docs.rs/hybrid-indexer/latest/hybrid_indexer/) library can be used to write indexers for Substrate blockchains. Rust programs that need to query Hybrid indexes can use this helper library.
+//!
+//! For an example of how to use this library, consult the [hybrid-cli source code](https://github.com/hybrid-explorer/hybrid-cli/blob/178ff966877c86c855e7d6d6b1a0ffddeea33376/src/main.rs#L161).
+
 #![feature(let_chains)]
 use futures_util::{SinkExt, StreamExt};
 pub use hybrid_indexer::shared::{Bytes32, Event, EventMeta, PalletMeta, Span, SubstrateKey};
@@ -11,6 +17,7 @@ use tokio_tungstenite::{
 #[cfg(test)]
 use tokio::net::TcpListener;
 
+/// Errors this crate can return
 #[derive(Error, Debug)]
 pub enum IndexError {
     #[error("connection error")]
@@ -21,6 +28,7 @@ pub enum IndexError {
     NoMessage,
 }
 
+/// Indexer state and methods
 pub struct Index {
     ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
 }
@@ -34,12 +42,14 @@ impl Index {
         Ok(serde_json::from_str(msg.to_text()?)?)
     }
 
+    /// Connect to a Hybrid indexer via WebSocket
     pub async fn connect(url: String) -> Result<Self, IndexError> {
         let (ws_stream, _) = connect_async(url).await?;
         let index = Index { ws_stream };
         Ok(index)
     }
 
+    /// Request status.
     pub async fn status(&mut self) -> Result<Vec<Span>, IndexError> {
         match self.send_recv(RequestMessage::Status).await? {
             ResponseMessage::Status(spans) => Ok(spans),
@@ -47,6 +57,7 @@ impl Index {
         }
     }
 
+    /// Subscribe to a stream of status updates.
     pub async fn subscribe_status(
         &mut self,
     ) -> Result<impl futures_util::Stream<Item = Result<Vec<Span>, IndexError>> + '_, IndexError>
@@ -65,6 +76,7 @@ impl Index {
         }))
     }
 
+    /// Unsubscribe to a stream of status updates.
     pub async fn unsubscribe_status(&mut self) -> Result<(), IndexError> {
         match self.send_recv(RequestMessage::UnsubscribeStatus).await? {
             ResponseMessage::Unsubscribed => Ok(()),
@@ -72,6 +84,7 @@ impl Index {
         }
     }
 
+    /// Request size on disk.
     pub async fn size_on_disk(&mut self) -> Result<u64, IndexError> {
         match self.send_recv(RequestMessage::SizeOnDisk).await? {
             ResponseMessage::SizeOnDisk(size) => Ok(size),
@@ -79,6 +92,7 @@ impl Index {
         }
     }
 
+    /// Request a list of all event variants being indexed.
     pub async fn get_variants(&mut self) -> Result<Vec<PalletMeta>, IndexError> {
         match self.send_recv(RequestMessage::Variants).await? {
             ResponseMessage::Variants(pallet_meta) => Ok(pallet_meta),
@@ -86,6 +100,7 @@ impl Index {
         }
     }
 
+    /// Get events that have emitted a specific key.
     pub async fn get_events(&mut self, key: Key) -> Result<Vec<Event>, IndexError> {
         match self.send_recv(RequestMessage::GetEvents { key }).await? {
             ResponseMessage::Events { events, .. } => Ok(events),
@@ -93,6 +108,7 @@ impl Index {
         }
     }
 
+    /// Subscribe to events that have emitted a specific key.
     pub async fn subscribe_events(
         &mut self,
         key: Key,
@@ -125,21 +141,19 @@ impl Index {
         }))
     }
 
+    /// Unsubscribe to an event subscription.
     pub async fn unsubscribe_events(&mut self, key: Key) -> Result<(), IndexError> {
-        let msg = RequestMessage::UnsubscribeEvents { key };
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        match response {
+        match self
+            .send_recv(RequestMessage::UnsubscribeEvents { key })
+            .await?
+        {
             ResponseMessage::Unsubscribed => Ok(()),
             _ => Err(IndexError::NoMessage),
         }
     }
 }
 
+/// Top-level key types that can be queried for
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
 #[serde(tag = "type", content = "value")]
 pub enum Key {
@@ -147,6 +161,7 @@ pub enum Key {
     Substrate(SubstrateKey),
 }
 
+/// JSON request messages
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum RequestMessage {
@@ -160,6 +175,7 @@ pub enum RequestMessage {
     SizeOnDisk,
 }
 
+/// JSON response messages
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "camelCase")]
