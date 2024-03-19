@@ -26,6 +26,14 @@ pub struct Index {
 }
 
 impl Index {
+    async fn send_recv(&mut self, send_msg: RequestMessage) -> Result<ResponseMessage, IndexError> {
+        self.ws_stream
+            .send(Message::Text(serde_json::to_string(&send_msg)?))
+            .await?;
+        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
+        Ok(serde_json::from_str(msg.to_text()?)?)
+    }
+
     pub async fn connect(url: String) -> Result<Self, IndexError> {
         let (ws_stream, _) = connect_async(url).await?;
         let index = Index { ws_stream };
@@ -33,13 +41,7 @@ impl Index {
     }
 
     pub async fn status(&mut self) -> Result<Vec<Span>, IndexError> {
-        let msg = RequestMessage::Status;
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        match response {
+        match self.send_recv(RequestMessage::Status).await? {
             ResponseMessage::Status(spans) => Ok(spans),
             _ => Err(IndexError::NoMessage),
         }
@@ -49,14 +51,7 @@ impl Index {
         &mut self,
     ) -> Result<impl futures_util::Stream<Item = Result<Vec<Span>, IndexError>> + '_, IndexError>
     {
-        let msg = RequestMessage::SubscribeStatus;
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        if response != ResponseMessage::Subscribed {
+        if self.send_recv(RequestMessage::SubscribeStatus).await? != ResponseMessage::Subscribed {
             return Err(IndexError::NoMessage);
         };
 
@@ -71,53 +66,28 @@ impl Index {
     }
 
     pub async fn unsubscribe_status(&mut self) -> Result<(), IndexError> {
-        let msg = RequestMessage::UnsubscribeStatus;
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        match response {
+        match self.send_recv(RequestMessage::UnsubscribeStatus).await? {
             ResponseMessage::Unsubscribed => Ok(()),
             _ => Err(IndexError::NoMessage),
         }
     }
 
     pub async fn size_on_disk(&mut self) -> Result<u64, IndexError> {
-        let msg = RequestMessage::SizeOnDisk;
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        match response {
+        match self.send_recv(RequestMessage::SizeOnDisk).await? {
             ResponseMessage::SizeOnDisk(size) => Ok(size),
             _ => Err(IndexError::NoMessage),
         }
     }
 
     pub async fn get_variants(&mut self) -> Result<Vec<PalletMeta>, IndexError> {
-        let msg = RequestMessage::Variants;
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        match response {
+        match self.send_recv(RequestMessage::Variants).await? {
             ResponseMessage::Variants(pallet_meta) => Ok(pallet_meta),
             _ => Err(IndexError::NoMessage),
         }
     }
 
     pub async fn get_events(&mut self, key: Key) -> Result<Vec<Event>, IndexError> {
-        let msg = RequestMessage::GetEvents { key };
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        match response {
+        match self.send_recv(RequestMessage::GetEvents { key }).await? {
             ResponseMessage::Events { events, .. } => Ok(events),
             _ => Err(IndexError::NoMessage),
         }
@@ -128,14 +98,11 @@ impl Index {
         key: Key,
     ) -> Result<impl futures_util::Stream<Item = Result<Vec<Event>, IndexError>> + '_, IndexError>
     {
-        let msg = RequestMessage::SubscribeEvents { key: key.clone() };
-        let json = serde_json::to_string(&msg)?;
-        self.ws_stream.send(Message::Text(json)).await?;
-
-        let msg = self.ws_stream.next().await.ok_or(IndexError::NoMessage)??;
-        let response: ResponseMessage = serde_json::from_str(msg.to_text()?)?;
-
-        if response != ResponseMessage::Subscribed {
+        if self
+            .send_recv(RequestMessage::SubscribeEvents { key: key.clone() })
+            .await?
+            != ResponseMessage::Subscribed
+        {
             return Err(IndexError::NoMessage);
         };
 
