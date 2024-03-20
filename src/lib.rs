@@ -34,6 +34,7 @@ pub struct Index {
 }
 
 impl Index {
+    /// Send a RequestMessage and wait for a ResponseMessage
     async fn send_recv(&mut self, send_msg: RequestMessage) -> Result<ResponseMessage, IndexError> {
         self.ws_stream
             .send(Message::Text(serde_json::to_string(&send_msg)?))
@@ -66,6 +67,7 @@ impl Index {
             return Err(IndexError::NoMessage);
         };
 
+        // Return a stream that emits each ResponseMessage as it is received.
         Ok(self.ws_stream.by_ref().map(|msg| {
             let response: ResponseMessage = serde_json::from_str(msg?.to_text()?)?;
 
@@ -122,6 +124,7 @@ impl Index {
             return Err(IndexError::NoMessage);
         };
 
+        // Return a stream that emits each ResponseMessage as it is received.
         Ok(self.ws_stream.by_ref().map(move |msg| {
             let response: ResponseMessage = serde_json::from_str(msg?.to_text()?)?;
 
@@ -129,13 +132,7 @@ impl Index {
                 ResponseMessage::Events {
                     key: response_key,
                     events,
-                } => {
-                    if response_key != key {
-                        Ok(vec![])
-                    } else {
-                        Ok(events)
-                    }
-                }
+                } => Ok(if response_key != key { vec![] } else { events }),
                 _ => Err(IndexError::NoMessage),
             }
         }))
