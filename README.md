@@ -1,1 +1,1 @@
-# Hybrid Rust API
+# Acuity Index Substrate Rust API

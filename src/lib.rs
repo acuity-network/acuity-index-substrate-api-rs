@@ -1,12 +1,10 @@
-//! A library for querying Hybrid indexes.
-//!
-//! The [Hybrid Indexer](https://docs.rs/hybrid-indexer/latest/hybrid_indexer/) library can be used to write indexers for Substrate blockchains. Rust programs that need to query Hybrid indexes can use this helper library.
-//!
-//! For an example of how to use this library, consult the [hybrid-cli source code](https://github.com/hybrid-explorer/hybrid-cli/blob/178ff966877c86c855e7d6d6b1a0ffddeea33376/src/main.rs#L161).
+//! A library for querying indexes built with Acuity Index Substrate.
 
 #![feature(let_chains)]
+pub use acuity_index_substrate::shared::{
+    Bytes32, Event, EventMeta, PalletMeta, Span, SubstrateKey,
+};
 use futures_util::{SinkExt, StreamExt};
-pub use hybrid_indexer::shared::{Bytes32, Event, EventMeta, PalletMeta, Span, SubstrateKey};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::net::TcpStream;
@@ -43,7 +41,7 @@ impl Index {
         Ok(serde_json::from_str(msg.to_text()?)?)
     }
 
-    /// Connect to a Hybrid indexer via WebSocket
+    /// Connect to a Acuity Substrate Index node via WebSocket
     pub async fn connect(url: String) -> Result<Self, IndexError> {
         let (ws_stream, _) = connect_async(url).await?;
         let index = Index { ws_stream };
